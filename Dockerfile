@@ -1,32 +1,27 @@
-FROM python:3.10-slim
+# Dockerfile
+FROM python:3.9-slim
 
-ENV PYTHONUNBUFFERED=1 \
-    TEMPLATES_DIR=/app/templates
-
-# Install system dependencies
+# Install system dependencies for LibreOffice
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    libreoffice-writer \
-    libreoffice-headless \
-    fonts-dejavu \
+    apt-get install -y libreoffice \
+    libssl-dev \
     fonts-liberation \
-    fonts-noto-cjk \
-    fonts-noto-core \
-    fonts-freefont-ttf \
-    libxinerama1 \
-    libdbus-glib-1-2 \
-    libcairo2 \
-    libgl1 \
-    && apt-get clean && \
+    libappindicator3-1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxss1 \
+    libxtst6 \
+    xdg-utils && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy ALL files including templates
 COPY . .
 
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8080
 
