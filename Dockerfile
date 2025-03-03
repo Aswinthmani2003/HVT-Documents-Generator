@@ -2,19 +2,16 @@
 FROM python:3.9-slim
 
 # Install LibreOffice and dependencies
+# Add to existing Dockerfile
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    libreoffice \
-    libssl-dev \
-    fonts-liberation \
-    libnss3 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxext6 \
+    libxinerama1 \
+    libdbus-glib-1-2 \
+    libglu1 \
+    libsm6 \
     libxrender1 \
-    libxt6 \
-    xdg-utils && \
-    rm -rf /var/lib/apt/lists/*
+    libfontconfig1 \
+    libx11-6
 
 WORKDIR /app
 
