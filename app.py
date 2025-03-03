@@ -8,7 +8,7 @@ from docx.oxml.ns import qn
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 import uuid
 import tempfile
-import subprocess  # Added for LibreOffice conversion
+import subprocess
 
 PROPOSAL_CONFIG = {
     "Manychats + CRM Automation - 550 USD": {
@@ -41,7 +41,7 @@ def apply_formatting(new_run, original_run):
     new_run.italic = original_run.italic
 
 def replace_in_paragraph(para, placeholders):
-    """Enhanced paragraph replacement with style preservation and table handling"""
+    """Enhanced paragraph replacement with style preservation"""
     original_runs = para.runs
     if not original_runs:
         return
@@ -79,7 +79,6 @@ def replace_in_paragraph(para, placeholders):
 
         original_run.text = segment
         apply_formatting(original_run, original_run)
-
         current_pos += segment_length
 
     if current_pos < len(full_text):
@@ -87,7 +86,7 @@ def replace_in_paragraph(para, placeholders):
         apply_formatting(new_run, original_runs[-1])
 
 def replace_and_format(doc, placeholders):
-    """Enhanced replacement with table cell handling"""
+    """Handle document formatting with tables"""
     for para in doc.paragraphs:
         replace_in_paragraph(para, placeholders)
 
@@ -106,7 +105,7 @@ def replace_and_format(doc, placeholders):
     return doc
 
 def get_hvt_ai_team_details():
-    """Collect team composition details for HVT AI proposal"""
+    """Collect team composition details"""
     st.subheader("Team Composition")
     team_roles = {
         "Project Manager": "P1",
@@ -133,7 +132,7 @@ def get_hvt_ai_team_details():
     return team_details
 
 def get_project_pricing_details():
-    """Collect project pricing details for custom price proposal"""
+    """Collect project pricing details"""
     st.subheader("Project Pricing Details")
     pricing_fields = {
         "Manychats Setup": "P01",
@@ -157,17 +156,20 @@ def get_project_pricing_details():
     return pricing_details
 
 def validate_phone_number(country, phone_number):
-    """Validate phone number based on country"""
+    """Validate phone number format"""
     if country.lower() == "india":
-        if not phone_number.startswith("+91"):
-            return False
-    else:
-        if not phone_number.startswith("+1"):
-            return False
-    return True
+        return phone_number.startswith("+91")
+    return phone_number.startswith("+1")
 
 def generate_document():
-    st.title("Offer Letter Generator")
+    # Verify LibreOffice installation first
+    try:
+        subprocess.check_output(['which', 'libreoffice'], stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError:
+        st.error("Critical System Error: LibreOffice not installed!")
+        st.stop()
+
+    st.title("Document Generator")
     base_dir = os.path.join(os.path.dirname(__file__), "templates")
 
     selected_proposal = st.selectbox("Select Document", list(PROPOSAL_CONFIG.keys()))
@@ -188,9 +190,8 @@ def generate_document():
         with col2:
             country = st.text_input("Country:")
             client_number = st.text_input("Client Number:")
-            if client_number and country:
-                if not validate_phone_number(country, client_number):
-                    st.error(f"Phone number for {country} should start with {'+91' if country.lower() == 'india' else '+1'}")
+            if client_number and country and not validate_phone_number(country, client_number):
+                st.error(f"Phone number for {country} should start with {'+91' if country.lower() == 'india' else '+1'}")
 
     date_field = st.date_input("Date:", datetime.today())
 
@@ -241,100 +242,94 @@ def generate_document():
         error = False
         if selected_proposal != "Internship Offer Letter":
             if client_number and country and not validate_phone_number(country, client_number):
-                st.error(f"Invalid phone number format for {country} should start with {'+91' if country.lower() == 'india' else '+1'}.")
                 error = True
+                st.error("Invalid phone number format")
         
         if not error:
             formatted_date = date_field.strftime("%d %b %Y")
             unique_id = str(uuid.uuid4())[:8]
 
             if config["team_type"] == "offer_letter":
-                doc_filename = f"Internship_Offer_Letter_{candidate_name.replace(' ', '_')}_{formatted_date}_{unique_id}.docx"
-                pdf_filename = f"Internship_Offer_Letter_{candidate_name.replace(' ', '_')}_{formatted_date}_{unique_id}.pdf"
-            elif config["team_type"] == "hvt_ai":
-                doc_filename = f"HVT_AI_Proposal_{client_name}_{formatted_date}_{unique_id}.docx"
-                pdf_filename = f"HVT_AI_Proposal_{client_name}_{formatted_date}_{unique_id}.pdf"
-            elif config["team_type"] == "hvt_ai_custom_price":
-                doc_filename = f"HVT_AI_Custom_Price_Proposal_{client_name}_{formatted_date}_{unique_id}.docx"
-                pdf_filename = f"HVT_AI_Custom_Price_Proposal_{client_name}_{formatted_date}_{unique_id}.pdf"
+                doc_filename = f"Offer_Letter_{candidate_name}_{formatted_date}_{unique_id}.docx"
+                pdf_filename = f"Offer_Letter_{candidate_name}_{formatted_date}_{unique_id}.pdf"
+            else:
+                doc_prefix = "Proposal_Custom" if "custom" in config["team_type"] else "Proposal"
+                doc_filename = f"{doc_prefix}_{client_name}_{formatted_date}_{unique_id}.docx"
+                pdf_filename = f"{doc_prefix}_{client_name}_{formatted_date}_{unique_id}.pdf"
 
             with tempfile.TemporaryDirectory() as temp_dir:
+                # Generate DOCX
                 doc = Document(template_path)
                 doc = replace_and_format(doc, placeholders)
-
                 doc_path = os.path.join(temp_dir, doc_filename)
                 doc.save(doc_path)
 
-                pdf_path = os.path.join(temp_dir, pdf_filename)
-
+                # Convert to PDF
                 try:
-                    # LibreOffice PDF conversion
-                    cmd = [
-                        'libreoffice', '--headless', '--convert-to', 'pdf',
-                        '--outdir', temp_dir, doc_path
-                    ]
                     result = subprocess.run(
-                        cmd,
+                        ['libreoffice', '--headless', '--convert-to', 'pdf',
+                         '--outdir', temp_dir, doc_path],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        timeout=15
+                        timeout=30
                     )
                     
                     if result.returncode != 0:
-                        raise RuntimeError(f"PDF conversion failed: {result.stderr.decode()}")
+                        error_msg = f"""
+                        PDF Conversion Failed!
+                        Exit Code: {result.returncode}
+                        Output: {result.stdout.decode()}
+                        Error: {result.stderr.decode()}
+                        """
+                        raise RuntimeError(error_msg)
                     
                     pdf_path = doc_path.replace('.docx', '.pdf')
                     
+                    # Store files in session state
+                    with open(doc_path, "rb") as f:
+                        st.session_state['doc_bytes'] = f.read()
+                    with open(pdf_path, "rb") as f:
+                        st.session_state['pdf_bytes'] = f.read()
+                    st.session_state['doc_filename'] = doc_filename
+                    st.session_state['pdf_filename'] = pdf_filename
+                    
                 except Exception as e:
-                    st.error(f"Error during PDF conversion: {e}")
+                    st.error(f"Conversion Error: {str(e)}")
                     st.stop()
 
-                with open(doc_path, "rb") as f:
-                    st.session_state['doc_bytes'] = f.read()
-                with open(pdf_path, "rb") as f:
-                    st.session_state['pdf_bytes'] = f.read()
-                st.session_state['doc_filename'] = doc_filename
-                st.session_state['pdf_filename'] = pdf_filename
-
+    # Download section
     if 'doc_bytes' in st.session_state and 'pdf_bytes' in st.session_state:
         st.markdown("---")
         st.subheader("Download Documents")
         
-        # Create in-memory buffers for download
-        doc_buffer = st.session_state['doc_bytes']
-        pdf_buffer = st.session_state['pdf_bytes']
-        
-        # Use columns for better button layout
         col1, col2 = st.columns(2)
         with col1:
             st.download_button(
                 label="📄 Download Word Document",
-                data=doc_buffer,
+                data=st.session_state['doc_bytes'],
                 file_name=st.session_state['doc_filename'],
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                key='doc_download'  # Unique key for each button
+                key='doc_download'
             )
         with col2:
             st.download_button(
                 label="📑 Download PDF Document",
-                data=pdf_buffer,
+                data=st.session_state['pdf_bytes'],
                 file_name=st.session_state['pdf_filename'],
                 mime="application/pdf",
-                key='pdf_download'  # Unique key for each button
+                key='pdf_download'
             )
         
-        # Clear session state after rendering buttons
-        st.session_state.pop('doc_bytes', None)
-        st.session_state.pop('pdf_bytes', None)
-        st.session_state.pop('doc_filename', None)
-        st.session_state.pop('pdf_filename', None)
+        # Clear session state
+        keys = ['doc_bytes', 'pdf_bytes', 'doc_filename', 'pdf_filename']
+        for key in keys:
+            st.session_state.pop(key, None)
 
 if __name__ == "__main__":
-    # Configure Streamlit for Cloud Run deployment
     st.set_page_config(
-        page_title="Document Generator",
+        page_title="HVT Document Generator",
         page_icon="📄",
         layout="centered",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="auto"
     )
     generate_document()
