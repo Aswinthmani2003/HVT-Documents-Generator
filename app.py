@@ -1,11 +1,11 @@
 import streamlit as st
-from docx import Document
-from datetime import datetime
 import os
 import uuid
 import tempfile
-import subprocess
-import time
+import pdfkit
+from datetime import datetime
+from jinja2 import Environment, FileSystemLoader
+from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
@@ -14,54 +14,38 @@ from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 # Set base directory paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-
-# Conditional import for Windows
-import platform
-if platform.system() == "Windows":
-    import pythoncom
-    pythoncom.CoInitialize()
+jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
 PROPOSAL_CONFIG = {
     "Manychats + CRM Automation - 550 USD": {
-        "template": "HVT Proposal - AI Automations.docx",
-        "special_fields": [("VDate", "<<")],
+        "template": "hvt_ai_template.html",
         "team_type": "hvt_ai"
     },
     "Manychats + CRM Automation - Custom Price": {
-        "template": "HVT Proposal - AI Automations - Custom Price.docx",
-        "special_fields": [("VDate", "<<")],
+        "template": "hvt_ai_custom_template.html",
         "team_type": "hvt_ai_custom_price"
     },
     "Internship Offer Letter": {
-        "template": "Offer Letter.docx",
-        "special_fields": [],
+        "template": "offer_letter_template.html",
         "team_type": "offer_letter"
     }
 }
 
-def convert_to_pdf(doc_path, pdf_path):
-    """Convert DOCX to PDF using unoconv with retries"""
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            result = subprocess.run(
-                ['unoconv', '-f', 'pdf', '-o', pdf_path, doc_path],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=30
-            )
-            return True
-        except subprocess.CalledProcessError as e:
-            if attempt == max_retries - 1:
-                error_msg = e.stderr.decode() if e.stderr else str(e)
-                st.error(f"PDF conversion failed: {error_msg}")
-                return False
-            time.sleep(2)
-        except Exception as e:
-            st.error(f"Conversion error: {str(e)}")
-            return False
-    return False
+def render_template(template_name, context):
+    template = jinja_env.get_template(template_name)
+    return template.render(context)
+
+def generate_pdf(html_content, output_path):
+    options = {
+        'page-size': 'A4',
+        'margin-top': '0.75in',
+        'margin-right': '0.75in',
+        'margin-bottom': '0.75in',
+        'margin-left': '0.75in',
+        'encoding': "UTF-8",
+        'quiet': ''
+    }
+    pdfkit.from_string(html_content, output_path, options=options)
 
 def apply_formatting(new_run, original_run):
     """Copy formatting from original run to new run"""
@@ -91,14 +75,14 @@ def replace_in_paragraph(para, placeholders):
 
     # Build full text and check for replacements
     full_text = "".join([run.text for run in original_runs])
-    modified = any(ph in full_text for ph in placeholders)
+    modified = any(ph in full_text for ph in placeholders.keys())
 
     if not modified:
         return
 
     # Perform replacements
     for ph, value in placeholders.items():
-        full_text = full_text.replace(ph, str(value))  # Replace placeholders with actual values
+        full_text = full_text.replace(ph, str(value))
 
     # Clear existing runs
     for run in original_runs:
@@ -110,26 +94,18 @@ def replace_in_paragraph(para, placeholders):
         if current_pos >= len(full_text):
             break
 
-        # Determine segment length for current run
         remaining_length = len(full_text) - current_pos
         segment_length = min(len(original_run.text), remaining_length)
-
-        # Get the corresponding text segment
         segment = full_text[current_pos:current_pos + segment_length]
-        if not segment:
-            continue
+        
+        if segment:
+            original_run.text = segment
+            apply_formatting(original_run, original_run)
+            current_pos += segment_length
 
-        # Assign text to the original run (if possible)
-        original_run.text = segment
-        apply_formatting(original_run, original_run)  # Preserve formatting
-
-        current_pos += segment_length
-
-    # If there's remaining text that wasn't assigned, add a new run
     if current_pos < len(full_text):
         new_run = para.add_run(full_text[current_pos:])
-        apply_formatting(new_run, original_runs[-1])  # Use last run formatting
-
+        apply_formatting(new_run, original_runs[-1])
 
 def replace_and_format(doc, placeholders):
     """Enhanced replacement with table cell handling"""
@@ -137,21 +113,18 @@ def replace_and_format(doc, placeholders):
     for para in doc.paragraphs:
         replace_in_paragraph(para, placeholders)
 
-    # Process tables with improved cell handling
+    # Process tables
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                # Handle nested tables first
                 if cell.tables:
                     for nested_table in cell.tables:
                         for nested_row in nested_table.rows:
                             for nested_cell in nested_row.cells:
                                 for para in nested_cell.paragraphs:
                                     replace_in_paragraph(para, placeholders)
-                # Handle cell paragraphs
                 for para in cell.paragraphs:
                     replace_in_paragraph(para, placeholders)
-                # Preserve cell vertical alignment
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
     return doc
 
@@ -179,8 +152,74 @@ def get_hvt_ai_team_details():
                 step=1,
                 key=f"hvt_team_{placeholder}"
             )
-            team_details[f"<<{placeholder}>>"] = str(count)
+            team_details[f"{placeholder}"] = str(count)
     return team_details
+
+def main():
+    st.title("Document Generator")
+
+    selected_proposal = st.selectbox("Select Document", list(PROPOSAL_CONFIG.keys()))
+    config = PROPOSAL_CONFIG[selected_proposal]
+    
+    context = {}
+    
+    if selected_proposal == "Internship Offer Letter":
+        context.update({
+            "candidate_name": st.text_input("Candidate Name:"),
+            "job_role": st.selectbox("Job Role", ["UI UX", "AI Automations", "Software Developer", "Sales"]),
+            "start_date": st.date_input("Starting Date").strftime("%d %B, %Y"),
+            "stipend": f"{st.number_input('Stipend Amount (Rs.)', min_value=0):,}",
+            "months": st.number_input("Duration (Months)", min_value=1)
+        })
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            context.update({
+                "client_name": st.text_input("Client Name:"),
+                "client_email": st.text_input("Client Email:")
+            })
+        with col2:
+            context.update({
+                "country": st.text_input("Country:"),
+                "client_number": st.text_input("Client Number:")
+            })
+        
+        if config["team_type"] == "hvt_ai":
+            context["team"] = get_hvt_ai_team_details()
+        elif config["team_type"] == "hvt_ai_custom_price":
+            context.update({
+                "team": get_hvt_ai_team_details(),
+                "pricing": get_project_pricing_details()
+            })
+
+    context["date"] = datetime.today().strftime("%d %B, %Y")
+
+    if st.button("Generate Document"):
+        try:
+            html_content = render_template(config["template"], context)
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                pdf_filename = f"document_{uuid.uuid4()}.pdf"
+                pdf_path = os.path.join(temp_dir, pdf_filename)
+                
+                generate_pdf(html_content, pdf_path)
+                
+                with open(pdf_path, "rb") as f:
+                    pdf_bytes = f.read()
+                
+                st.session_state['pdf_bytes'] = pdf_bytes
+                st.session_state['pdf_filename'] = pdf_filename
+
+        except Exception as e:
+            st.error(f"Error generating document: {str(e)}")
+
+    if 'pdf_bytes' in st.session_state:
+        st.download_button(
+            label="📄 Download PDF Document",
+            data=st.session_state['pdf_bytes'],
+            file_name=st.session_state['pdf_filename'],
+            mime="application/pdf"
+        )
 
 def get_project_pricing_details():
     """Collect project pricing details for custom price proposal"""
@@ -265,12 +304,10 @@ def generate_document():
     placeholders = {}
     if selected_proposal == "Internship Offer Letter":
         placeholders = {
-            # Updated date format here
-            "<<Date>>": date_field.strftime("%d %B, %Y"),  # Changed to "1 March, 2025" format
+            "<<Date>>": date_field.strftime("%d %B, %Y"),
             "<<E-Name>>": candidate_name,
             "<<Job>>": job_role,
-            # Formatted stipend with commas
-            "<<Stipend>>": f"{stipend:,}",  # Changed to 10,000 format
+            "<<Stipend>>": f"{stipend:,}",
             "<<S-Date>>": start_date.strftime("%d %B, %Y"),
             "<<S-date>>": start_date.strftime("%d-%m-%Y"),
             "<<Months>>": months
@@ -280,8 +317,8 @@ def generate_document():
             "<<Client Name>>": client_name,
             "<<Client Email>>": client_email,
             "<<Client Number>>": client_number,
-            "<<Date>>": date_field.strftime("%d %B, %Y"),  # Changed to "1 March, 2025" format
-            "<<D-Date>>": date_field.strftime("%d %B, %Y"),  # Added D-Date with same value as Date
+            "<<Date>>": date_field.strftime("%d %B, %Y"),
+            "<<D-Date>>": date_field.strftime("%d %B, %Y"),
             "<<Country>>": country
         }
         placeholders.update(team_data)
@@ -300,60 +337,59 @@ def generate_document():
                 error = True
         
         if not error:
-            formatted_date = date_field.strftime("%d-%b-%Y")  # Changed to remove spaces
+            formatted_date = date_field.strftime("%d-%b-%Y")
             unique_id = str(uuid.uuid4())[:8]
 
-            # Determine filenames
+            # Generate filenames without spaces
             if config["team_type"] == "offer_letter":
                 clean_name = candidate_name.replace(' ', '_')
-                doc_filename = f"Internship_Offer_Letter_{clean_name}_{formatted_date}_{unique_id}.docx"
-                pdf_filename = f"Internship_Offer_Letter_{clean_name}_{formatted_date}_{unique_id}.pdf"
-            elif config["team_type"] == "hvt_ai":
+                doc_filename = f"Offer_Letter_{clean_name}_{formatted_date}_{unique_id}.docx"
+                pdf_filename = f"Offer_Letter_{clean_name}_{formatted_date}_{unique_id}.pdf"
+            else:
                 clean_name = client_name.replace(' ', '_')
-                doc_filename = f"HVT_AI_Proposal_{clean_name}_{formatted_date}_{unique_id}.docx"
-                pdf_filename = f"HVT_AI_Proposal_{clean_name}_{formatted_date}_{unique_id}.pdf"
-            elif config["team_type"] == "hvt_ai_custom_price":
-                clean_name = client_name.replace(' ', '_')
-                doc_filename = f"HVT_AI_Custom_Price_Proposal_{clean_name}_{formatted_date}_{unique_id}.docx"
-                pdf_filename = f"HVT_AI_Custom_Price_Proposal_{clean_name}_{formatted_date}_{unique_id}.pdf"
+                doc_filename = f"Proposal_{clean_name}_{formatted_date}_{unique_id}.docx"
+                pdf_filename = f"Proposal_{clean_name}_{formatted_date}_{unique_id}.pdf"
 
             with tempfile.TemporaryDirectory() as temp_dir:
-                doc = Document(template_path)
-                doc = replace_and_format(doc, placeholders)
-
                 doc_path = os.path.join(temp_dir, doc_filename)
-                doc.save(doc_path)
-
                 pdf_path = os.path.join(temp_dir, pdf_filename)
 
-                # Convert using unoconv
-                if not convert_to_pdf(doc_path, pdf_path):
-                    st.stop()
+                # Process document
+                doc = Document(template_path)
+                doc = replace_and_format(doc, placeholders)
+                doc.save(doc_path)
 
-                # Store files in session state
-                with open(doc_path, "rb") as f:
-                    st.session_state['doc_bytes'] = f.read()
-                with open(pdf_path, "rb") as f:
-                    st.session_state['pdf_bytes'] = f.read()
-                st.session_state['doc_filename'] = doc_filename
-                st.session_state['pdf_filename'] = pdf_filename
+                # Convert to PDF
+                if convert_to_pdf(doc_path, pdf_path):
+                    # Store files in session state
+                    with open(doc_path, "rb") as f:
+                        st.session_state['doc_bytes'] = f.read()
+                    with open(pdf_path, "rb") as f:
+                        st.session_state['pdf_bytes'] = f.read()
+                    st.session_state['doc_filename'] = doc_filename
+                    st.session_state['pdf_filename'] = pdf_filename
+                else:
+                    st.error("Failed to generate PDF document")
 
-    # Display persistent download buttons
+    # Download buttons
     if 'doc_bytes' in st.session_state and 'pdf_bytes' in st.session_state:
         st.markdown("---")
         st.subheader("Download Documents")
-        st.download_button(
-            label="📄 Download Word Document",
-            data=st.session_state['doc_bytes'],
-            file_name=st.session_state['doc_filename'],
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-        st.download_button(
-            label="📑 Download PDF Document",
-            data=st.session_state['pdf_bytes'],
-            file_name=st.session_state['pdf_filename'],
-            mime="application/pdf"
-        )
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="📄 Download Word Document",
+                data=st.session_state['doc_bytes'],
+                file_name=st.session_state['doc_filename'],
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+        with col2:
+            st.download_button(
+                label="📑 Download PDF Document",
+                data=st.session_state['pdf_bytes'],
+                file_name=st.session_state['pdf_filename'],
+                mime="application/pdf"
+            )
 
 if __name__ == "__main__":
     generate_document()
