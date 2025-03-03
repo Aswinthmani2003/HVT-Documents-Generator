@@ -2,9 +2,9 @@ import streamlit as st
 import os
 import uuid
 import tempfile
-import pdfkit
+import subprocess
+import time
 from datetime import datetime
-from jinja2 import Environment, FileSystemLoader
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
@@ -14,7 +14,12 @@ from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 # Set base directory paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+
+# Conditional import for Windows
+import platform
+if platform.system() == "Windows":
+    import pythoncom
+    pythoncom.CoInitialize()
 
 PROPOSAL_CONFIG = {
     "Manychats + CRM Automation - 550 USD": {
@@ -33,6 +38,34 @@ PROPOSAL_CONFIG = {
         "team_type": "offer_letter"
     }
 }
+
+def convert_to_pdf(doc_path, pdf_path):
+    """Convert DOCX to PDF using LibreOffice"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = subprocess.run(
+                ['libreoffice', '--headless', '--convert-to', 'pdf', '--outdir', 
+                 os.path.dirname(pdf_path), doc_path],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30
+            )
+            # Rename the output PDF to the desired filename
+            temp_pdf = os.path.splitext(doc_path)[0] + '.pdf'
+            os.rename(temp_pdf, pdf_path)
+            return True
+        except subprocess.CalledProcessError as e:
+            if attempt == max_retries - 1:
+                error_msg = e.stderr.decode() if e.stderr else str(e)
+                st.error(f"PDF conversion failed: {error_msg}")
+                return False
+            time.sleep(2)
+        except Exception as e:
+            st.error(f"Conversion error: {str(e)}")
+            return False
+    return False
 
 def render_template(template_name, context):
     template = jinja_env.get_template(template_name)
@@ -393,6 +426,5 @@ def generate_document():
                 file_name=st.session_state['pdf_filename'],
                 mime="application/pdf"
             )
-
 if __name__ == "__main__":
     generate_document()
