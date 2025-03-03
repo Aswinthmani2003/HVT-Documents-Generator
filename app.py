@@ -299,18 +299,42 @@ def generate_document():
     if 'doc_bytes' in st.session_state and 'pdf_bytes' in st.session_state:
         st.markdown("---")
         st.subheader("Download Documents")
-        st.download_button(
-            label="📄 Download Word Document",
-            data=st.session_state['doc_bytes'],
-            file_name=st.session_state['doc_filename'],
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-        st.download_button(
-            label="📑 Download PDF Document",
-            data=st.session_state['pdf_bytes'],
-            file_name=st.session_state['pdf_filename'],
-            mime="application/pdf"
-        )
+        
+        # Create in-memory buffers for download
+        doc_buffer = st.session_state['doc_bytes']
+        pdf_buffer = st.session_state['pdf_bytes']
+        
+        # Use columns for better button layout
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="📄 Download Word Document",
+                data=doc_buffer,
+                file_name=st.session_state['doc_filename'],
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key='doc_download'  # Unique key for each button
+            )
+        with col2:
+            st.download_button(
+                label="📑 Download PDF Document",
+                data=pdf_buffer,
+                file_name=st.session_state['pdf_filename'],
+                mime="application/pdf",
+                key='pdf_download'  # Unique key for each button
+            )
+        
+        # Clear session state after rendering buttons
+        st.session_state.pop('doc_bytes', None)
+        st.session_state.pop('pdf_bytes', None)
+        st.session_state.pop('doc_filename', None)
+        st.session_state.pop('pdf_filename', None)
 
 if __name__ == "__main__":
+    # Configure Streamlit for Cloud Run deployment
+    st.set_page_config(
+        page_title="Document Generator",
+        page_icon="📄",
+        layout="centered",
+        initial_sidebar_state="expanded"
+    )
     generate_document()
