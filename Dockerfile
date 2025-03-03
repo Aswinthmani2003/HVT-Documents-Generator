@@ -1,19 +1,18 @@
-# Dockerfile
+# Updated Dockerfile
 FROM python:3.9-slim
 
-# Install system dependencies for LibreOffice
+# Install LibreOffice and dependencies
 RUN apt-get update && \
-    apt-get install -y libreoffice \
+    apt-get install -y --no-install-recommends \
+    libreoffice \
     libssl-dev \
     fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libnspr4 \
     libnss3 \
     libx11-xcb1 \
-    libxss1 \
-    libxtst6 \
+    libxcb1 \
+    libxext6 \
+    libxrender1 \
+    libxt6 \
     xdg-utils && \
     rm -rf /var/lib/apt/lists/*
 
