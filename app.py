@@ -45,17 +45,19 @@ def convert_to_pdf(doc_path, pdf_path):
     for attempt in range(max_retries):
         try:
             result = subprocess.run(
-                ['libreoffice', '--headless', '--convert-to', 'pdf', '--outdir', 
+                ['soffice', '--headless', '--convert-to', 'pdf', '--outdir', 
                  os.path.dirname(pdf_path), doc_path],
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 timeout=30
             )
-            # Rename the output PDF to the desired filename
+            # Rename output file to desired filename
             temp_pdf = os.path.splitext(doc_path)[0] + '.pdf'
-            os.rename(temp_pdf, pdf_path)
-            return True
+            if os.path.exists(temp_pdf):
+                os.rename(temp_pdf, pdf_path)
+                return True
+            return False
         except subprocess.CalledProcessError as e:
             if attempt == max_retries - 1:
                 error_msg = e.stderr.decode() if e.stderr else str(e)
