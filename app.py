@@ -18,15 +18,18 @@ jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
 PROPOSAL_CONFIG = {
     "Manychats + CRM Automation - 550 USD": {
-        "template": "hvt_ai_template.html",
+        "template": "HVT Proposal - AI Automations.docx",
+        "special_fields": [("VDate", "<<")],
         "team_type": "hvt_ai"
     },
     "Manychats + CRM Automation - Custom Price": {
-        "template": "hvt_ai_custom_template.html",
+        "template": "HVT Proposal - AI Automations - Custom Price.docx",
+        "special_fields": [("VDate", "<<")],
         "team_type": "hvt_ai_custom_price"
     },
     "Internship Offer Letter": {
-        "template": "offer_letter_template.html",
+        "template": "Offer Letter.docx",
+        "special_fields": [],
         "team_type": "offer_letter"
     }
 }
