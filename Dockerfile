@@ -1,20 +1,15 @@
-# Use official Python image
-FROM python:3.10
+FROM python:3.9-slim
 
-# Set working directory
+RUN apt-get update && apt-get install -y \
+    pandoc \
+    texlive-xetex \
+    texlive-fonts-recommended \
+    texlive-plain-generic \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
+COPY . .
 
-# Copy files to container
-COPY . /app
+RUN pip install -r requirements.txt
 
-# Upgrade pip
-RUN pip install --upgrade pip
-
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Expose port 8080 for Cloud Run
-EXPOSE 8080
-
-# Run the Streamlit app on the correct port
-CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "your_script_name.py", "--server.port=8080", "--server.address=0.0.0.0"]
