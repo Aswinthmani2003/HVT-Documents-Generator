@@ -1,0 +1,39 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: appsynergies-website-a67bf
+  RUN_REGION: us-central1
+  SERVICE_NAME: document-generator
+
+jobs:
+  setup-build-deploy:
+    name: Setup, Build, and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Google Cloud
+        uses: google-github-actions/setup-gcloud@v2.0
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: appsynergies-website-a67bf
+
+      - name: Build Docker image
+        run: |
+          gcloud builds submit \
+            --tag "gcr.io/appsynergies-website-a67bf/document-generator:$GITHUB_SHA"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy document-generator \
+            --image gcr.io/appsynergies-website-a67bf/document-generator:$GITHUB_SHA \
+            --platform managed \
+            --region us-central1 \
+            --allow-unauthenticated
