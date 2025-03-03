@@ -2,19 +2,20 @@ import streamlit as st
 from docx import Document
 from datetime import datetime
 import os
+import uuid
+import tempfile
+import subprocess
+import time
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
-import uuid
-import tempfile
-import subprocess
 
 # Set base directory paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
-# Conditional import and initialization for Windows
+# Conditional import for Windows
 import platform
 if platform.system() == "Windows":
     import pythoncom
@@ -39,16 +40,28 @@ PROPOSAL_CONFIG = {
 }
 
 def convert_to_pdf(doc_path, pdf_path):
-    """Convert DOCX to PDF using unoconv"""
-    try:
-        subprocess.run(['unoconv', '-f', 'pdf', '-o', pdf_path, doc_path], check=True)
-        return True
-    except subprocess.CalledProcessError as e:
-        st.error(f"PDF conversion failed: {str(e)}")
-        return False
-    except FileNotFoundError:
-        st.error("unoconv is not installed. Please install it using 'apt-get install unoconv'")
-        return False
+    """Convert DOCX to PDF using unoconv with retries"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = subprocess.run(
+                ['unoconv', '-f', 'pdf', '-o', pdf_path, doc_path],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30
+            )
+            return True
+        except subprocess.CalledProcessError as e:
+            if attempt == max_retries - 1:
+                error_msg = e.stderr.decode() if e.stderr else str(e)
+                st.error(f"PDF conversion failed: {error_msg}")
+                return False
+            time.sleep(2)
+        except Exception as e:
+            st.error(f"Conversion error: {str(e)}")
+            return False
+    return False
 
 def apply_formatting(new_run, original_run):
     """Copy formatting from original run to new run"""
@@ -287,19 +300,22 @@ def generate_document():
                 error = True
         
         if not error:
-            formatted_date = date_field.strftime("%d %b %Y")
+            formatted_date = date_field.strftime("%d-%b-%Y")  # Changed to remove spaces
             unique_id = str(uuid.uuid4())[:8]
 
             # Determine filenames
             if config["team_type"] == "offer_letter":
-                doc_filename = f"Internship_Offer_Letter_{candidate_name.replace(' ', '_')}_{formatted_date}_{unique_id}.docx"
-                pdf_filename = f"Internship_Offer_Letter_{candidate_name.replace(' ', '_')}_{formatted_date}_{unique_id}.pdf"
+                clean_name = candidate_name.replace(' ', '_')
+                doc_filename = f"Internship_Offer_Letter_{clean_name}_{formatted_date}_{unique_id}.docx"
+                pdf_filename = f"Internship_Offer_Letter_{clean_name}_{formatted_date}_{unique_id}.pdf"
             elif config["team_type"] == "hvt_ai":
-                doc_filename = f"HVT_AI_Proposal_{client_name}_{formatted_date}_{unique_id}.docx"
-                pdf_filename = f"HVT_AI_Proposal_{client_name}_{formatted_date}_{unique_id}.pdf"
+                clean_name = client_name.replace(' ', '_')
+                doc_filename = f"HVT_AI_Proposal_{clean_name}_{formatted_date}_{unique_id}.docx"
+                pdf_filename = f"HVT_AI_Proposal_{clean_name}_{formatted_date}_{unique_id}.pdf"
             elif config["team_type"] == "hvt_ai_custom_price":
-                doc_filename = f"HVT_AI_Custom_Price_Proposal_{client_name}_{formatted_date}_{unique_id}.docx"
-                pdf_filename = f"HVT_AI_Custom_Price_Proposal_{client_name}_{formatted_date}_{unique_id}.pdf"
+                clean_name = client_name.replace(' ', '_')
+                doc_filename = f"HVT_AI_Custom_Price_Proposal_{clean_name}_{formatted_date}_{unique_id}.docx"
+                pdf_filename = f"HVT_AI_Custom_Price_Proposal_{clean_name}_{formatted_date}_{unique_id}.pdf"
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 doc = Document(template_path)
