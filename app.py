@@ -12,17 +12,17 @@ from docx2pdf import convert
 
 PROPOSAL_CONFIG = {
     "Manychats + CRM Automation - 550 USD": {
-        "template": "templates/HVT Proposal - AI Automations.docx",
+        "template": "HVT Proposal - AI Automations.docx",  
         "special_fields": [("VDate", "<<")],
         "team_type": "hvt_ai"
     },
     "Manychats + CRM Automation - Custom Price": {
-        "template": "templates/HVT Proposal - AI Automations - Custom Price.docx",
+        "template": "HVT Proposal - AI Automations - Custom Price.docx",
         "special_fields": [("VDate", "<<")],
         "team_type": "hvt_ai_custom_price"
     },
     "Internship Offer Letter": {
-        "template": "templates/Offer Letter.docx",
+        "template": "Offer Letter.docx",
         "special_fields": [],
         "team_type": "offer_letter"
     }
@@ -183,8 +183,9 @@ def validate_phone_number(country, phone_number):
 
 def generate_document():
     st.title("Offer Letter Generator")
-    base_dir = os.path.join(os.getcwd(), "templates")
-
+    # Get directory of current script
+    base_dir = os.path.join(os.path.dirname(__file__), "templates")
+    
     selected_proposal = st.selectbox("Select Document", list(PROPOSAL_CONFIG.keys()))
     config = PROPOSAL_CONFIG[selected_proposal]
     template_path = os.path.join(base_dir, config["template"])
