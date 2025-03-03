@@ -8,7 +8,7 @@ from docx.oxml.ns import qn
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 import uuid
 import tempfile
-from docx2pdf import convert
+import subprocess
 
 # Set base directory paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +37,18 @@ PROPOSAL_CONFIG = {
         "team_type": "offer_letter"
     }
 }
+
+def convert_to_pdf(doc_path, pdf_path):
+    """Convert DOCX to PDF using unoconv"""
+    try:
+        subprocess.run(['unoconv', '-f', 'pdf', '-o', pdf_path, doc_path], check=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        st.error(f"PDF conversion failed: {str(e)}")
+        return False
+    except FileNotFoundError:
+        st.error("unoconv is not installed. Please install it using 'apt-get install unoconv'")
+        return False
 
 def apply_formatting(new_run, original_run):
     """Copy formatting from original run to new run"""
@@ -193,7 +205,7 @@ def validate_phone_number(country, phone_number):
 
 def generate_document():
     st.title("Offer Letter Generator")
-    base_dir = TEMPLATES_DIR  # Modified line
+    base_dir = TEMPLATES_DIR
 
     selected_proposal = st.selectbox("Select Document", list(PROPOSAL_CONFIG.keys()))
     config = PROPOSAL_CONFIG[selected_proposal]
@@ -298,10 +310,8 @@ def generate_document():
 
                 pdf_path = os.path.join(temp_dir, pdf_filename)
 
-                try:
-                    convert(doc_path, pdf_path)
-                except Exception as e:
-                    st.error(f"Error during PDF conversion: {e}")
+                # Convert using unoconv
+                if not convert_to_pdf(doc_path, pdf_path):
                     st.stop()
 
                 # Store files in session state
