@@ -327,7 +327,3 @@ def generate_document():
 
 if __name__ == "__main__":
     generate_document()
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))  # Use PORT env variable or default to 8080
-    st.run(port=port)
