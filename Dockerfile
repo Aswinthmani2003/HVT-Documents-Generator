@@ -1,5 +1,7 @@
+# Dockerfile
 FROM python:3.9-slim
 
+# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libreoffice \
@@ -25,6 +27,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f -v
 
+# Accept Microsoft fonts EULA
 RUN echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | debconf-set-selections
 
 WORKDIR /app
