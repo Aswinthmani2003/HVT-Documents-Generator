@@ -5,11 +5,11 @@ FROM python:3.10-slim
 ENV PYTHONUNBUFFERED=1 \
     TEMPLATES_DIR=/app/templates
 
-# Install system dependencies for LibreOffice and fonts
+# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libreoffice \
-    libreoffice-writer \
+    unoconv \
     fonts-dejavu \
     fonts-liberation \
     && apt-get clean && \
