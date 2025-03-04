@@ -1,6 +1,6 @@
 FROM python:3.9-slim
 
-# Install LibreOffice with dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
     unoconv \
@@ -11,15 +11,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure environment
+# Set environment variables
 ENV STREAMLIT_SERVER_PORT=8080
 ENV UNO_PATH=/usr/lib/libreoffice/program
 
 WORKDIR /app
-COPY . .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Health check endpoint
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=30s \
   CMD curl -f http://localhost:8080/_stcore/health || exit 1
 
