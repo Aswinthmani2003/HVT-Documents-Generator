@@ -1,29 +1,23 @@
 FROM python:3.9-slim
 
-# Install LibreOffice with PyUNO and fonts
+# Install LibreOffice with Python bindings
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
     unoconv \
+    python3-uno \
     libreoffice-writer \
-    libreoffice-calc \
-    libreoffice-impress \
-    libreoffice-style-breeze \
     fonts-dejavu \
     fonts-liberation \
-    fonts-noto-core \
-    fonts-noto-extra \
-    python3-uno \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Set environment variables
+ENV UNO_PATH=/usr/lib/libreoffice/program
+ENV PYTHONPATH=/usr/lib/python3/dist-packages
 
-COPY requirements.txt .
+WORKDIR /app
+COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-
 EXPOSE 8080
-ENV STREAMLIT_SERVER_PORT=8080
-
-CMD (unoserver --port 2002 &) && \
-    streamlit run app.py --server.port 8080 --server.address 0.0.0.0
+CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
