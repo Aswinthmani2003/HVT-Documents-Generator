@@ -37,12 +37,21 @@ PROPOSAL_CONFIG = {
 def convert_docx_to_pdf(docx_path, pdf_path):
     """Convert DOCX to PDF using LibreOffice"""
     try:
+        # Start unoserver in the background
+        uno_process = subprocess.Popen(["unoserver", "--port", "2002"])
+        
+        # Convert using unoconv
         result = subprocess.run(
             ['unoconv', '-f', 'pdf', '-o', str(pdf_path.parent), str(docx_path)],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
+        
+        # Stop unoserver
+        uno_process.terminate()
+        uno_process.wait()
+        
         return True
     except subprocess.CalledProcessError as e:
         st.error(f"Conversion failed: {e.stderr.decode()}")
@@ -232,16 +241,10 @@ def generate_document():
 
                 pdf_path = os.path.join(temp_dir, pdf_filename)
                 
-                # Start unoserver process
-                uno_process = subprocess.Popen(["unoserver", "--port", "2002"])
-                
-                try:
-                    if not convert_docx_to_pdf(doc_path, pdf_path):
-                        st.error("PDF conversion failed")
-                        st.stop()
-                finally:
-                    uno_process.terminate()
-                    uno_process.wait()
+                # Convert to PDF using LibreOffice
+                if not convert_docx_to_pdf(doc_path, pdf_path):
+                    st.error("Failed to convert DOCX to PDF")
+                    st.stop()
 
                 # Store files in session state
                 with open(doc_path, "rb") as f:
