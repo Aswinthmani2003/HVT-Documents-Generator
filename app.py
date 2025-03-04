@@ -2,8 +2,11 @@ import streamlit as st
 from docx import Document
 from datetime import datetime
 import os
+from docx2pdf import convert
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
+import platform
+import time
 from docx.oxml.ns import qn
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 import uuid
@@ -16,7 +19,7 @@ import platform
 if platform.system() == "Windows":
     import pythoncom
     pythoncom.CoInitialize()
-    from docx2pdf import convert
+    
 
 PROPOSAL_CONFIG = {
     "Manychats + CRM Automation - 550 USD": {
@@ -37,39 +40,52 @@ PROPOSAL_CONFIG = {
 }
 
 def convert_docx_to_pdf(docx_path, pdf_path):
-    """Platform-agnostic DOCX to PDF conversion"""
+    """Robust DOCX to PDF conversion with cross-platform support"""
     try:
         if platform.system() == "Windows":
+            # Windows conversion using docx2pdf
             from docx2pdf import convert
-            convert(docx_path, pdf_path)
+            convert(str(docx_path), str(pdf_path))
             return True
         else:
-            # Start unoserver with explicit path
-            uno_process = subprocess.Popen([
-                "unoserver", 
-                "--interface", "0.0.0.0",
-                "--port", "2002"
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            
-            # Add conversion timeout
-            result = subprocess.run(
-                ['unoconv', '-f', 'pdf', '-o', str(pdf_path.parent), str(docx_path)],
-                check=True,
-                timeout=30,
+            # Linux conversion using unoconv
+            # Start unoserver with verbose logging
+            uno_process = subprocess.Popen(
+                ["unoserver", "--port", "2002", "--interface", "0.0.0.0"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
+                text=True
             )
+            
+            # Wait for server initialization
+            time.sleep(15)
+            
+            # Perform conversion with extended timeout
+            result = subprocess.run(
+                ['unoconv', '-v', '-f', 'pdf', '-o', str(pdf_path.parent), str(docx_path)],
+                check=True,
+                timeout=120,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            # Log conversion details
+            print("Conversion Output:")
+            print("STDOUT:", result.stdout)
+            print("STDERR:", result.stderr)
             
             # Cleanup process
             uno_process.terminate()
-            uno_process.wait(timeout=10)
+            uno_process.wait(timeout=30)
+            
             return True
             
     except subprocess.CalledProcessError as e:
-        st.error(f"Conversion error: {e.stderr.decode()}")
+        print(f"Conversion Error: {e.stderr}")
         return False
     except Exception as e:
-        st.error(f"Conversion failed: {str(e)}")
+        print(f"Critical Failure: {str(e)}")
         return False
 
 def apply_formatting(new_run, original_run):
