@@ -8,10 +8,11 @@ from docx.oxml.ns import qn
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 import uuid
 import tempfile
-from docx2pdf import convert
-import platform
+import subprocess
+from pathlib import Path
 
-# Windows COM initialization handling
+# Conditional import for Windows
+import platform
 if platform.system() == "Windows":
     import pythoncom
 
@@ -33,110 +34,91 @@ PROPOSAL_CONFIG = {
     }
 }
 
-def apply_run_formatting(new_run, source_run):
-    """Copy formatting from source run to new run with null checks"""
-    if source_run is None:
+def convert_docx_to_pdf(docx_path, pdf_path):
+    """Convert DOCX to PDF using LibreOffice"""
+    try:
+        result = subprocess.run(
+            ['unoconv', '-f', 'pdf', '-o', str(pdf_path.parent), str(docx_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        return True
+    except subprocess.CalledProcessError as e:
+        st.error(f"Conversion failed: {e.stderr.decode()}")
+        return False
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return False
+
+def apply_formatting(new_run, original_run):
+    """Copy formatting from original run to new run"""
+    if original_run.font.name:
+        new_run.font.name = original_run.font.name
+        new_run._element.rPr.rFonts.set(qn('w:eastAsia'), original_run.font.name)
+    if original_run.font.size:
+        new_run.font.size = original_run.font.size
+    if original_run.font.color.rgb:
+        new_run.font.color.rgb = original_run.font.color.rgb
+    new_run.bold = original_run.bold
+    new_run.italic = original_run.italic
+
+def replace_in_paragraph(para, placeholders):
+    """Enhanced paragraph replacement with style preservation"""
+    original_runs = para.runs
+    if not original_runs:
         return
 
-    # Copy font name if it exists
-    if source_run.font.name:
-        new_run.font.name = source_run.font.name
-        # Handle East Asian font setting safely
-        rPr = new_run._element.get_or_add_rPr()
-        rFonts = rPr.get_or_add_rFonts()
-        rFonts.set(qn('w:eastAsia'), source_run.font.name)
+    full_text = "".join([run.text for run in original_runs])
+    modified = any(ph in full_text for ph in placeholders)
 
-    # Copy font size if it exists
-    if source_run.font.size:
-        new_run.font.size = source_run.font.size
+    if not modified:
+        return
 
-    # Copy font color if it exists
-    if source_run.font.color and source_run.font.color.rgb:
-        new_run.font.color.rgb = source_run.font.color.rgb
+    for ph, value in placeholders.items():
+        full_text = full_text.replace(ph, str(value))
 
-    # Copy basic formatting properties
-    new_run.bold = source_run.bold
-    new_run.italic = source_run.italic
-    new_run.underline = source_run.underline
-
-def replace_placeholder(paragraph, placeholder, value):
-    """Replace placeholder in paragraph while preserving formatting"""
-    if placeholder not in paragraph.text:
-        return False
-
-    # Check if there are any runs
-    if not paragraph.runs:
-        # If no runs, just replace the text directly
-        paragraph.text = paragraph.text.replace(placeholder, str(value))
-        return True
-
-    # Split runs and replace placeholder
-    runs = paragraph.runs
-    full_text = ''.join([run.text for run in runs])
-    
-    if placeholder not in full_text:
-        return False
-
-    start_idx = full_text.find(placeholder)
-    end_idx = start_idx + len(placeholder)
-    
-    # Clear existing runs
-    for run in runs:
+    for run in original_runs:
         run.text = ""
-    
-    # Split text into before, replacement, and after
-    before = full_text[:start_idx]
-    after = full_text[end_idx:]
-    
-    # Add new runs with original formatting
-    if before:
-        new_run = paragraph.add_run(before)
-        apply_run_formatting(new_run, runs[0])
-    
-    new_run = paragraph.add_run(str(value))
-    apply_run_formatting(new_run, runs[0])
-    
-    if after:
-        new_run = paragraph.add_run(after)
-        apply_run_formatting(new_run, runs[-1])
-    
-    return True
 
-def process_document(doc, placeholders):
-    """Process entire document including tables and nested tables"""
-    # Process paragraphs
-    for paragraph in doc.paragraphs:
-        if not paragraph.text:
-            continue  # Skip empty paragraphs
-        for ph, value in placeholders.items():
-            replace_placeholder(paragraph, ph, value)
+    current_pos = 0
+    for start, end, original_run in [
+        (i, i+len(run.text), run) 
+        for i, run in enumerate(original_runs)
+    ]:
+        if current_pos >= len(full_text):
+            break
 
-    # Process tables
+        segment = full_text[current_pos:current_pos+len(original_run.text)]
+        original_run.text = segment
+        apply_formatting(original_run, original_run)
+        current_pos += len(segment)
+
+    if current_pos < len(full_text):
+        new_run = para.add_run(full_text[current_pos:])
+        apply_formatting(new_run, original_runs[-1])
+
+def replace_and_format(doc, placeholders):
+    """Process entire document"""
+    for para in doc.paragraphs:
+        replace_in_paragraph(para, placeholders)
+
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                # Handle nested tables first
                 if cell.tables:
                     for nested_table in cell.tables:
                         for nested_row in nested_table.rows:
                             for nested_cell in nested_row.cells:
                                 for para in nested_cell.paragraphs:
-                                    if not para.text:
-                                        continue
-                                    for ph, value in placeholders.items():
-                                        replace_placeholder(para, ph, value)
-                # Process cell paragraphs
+                                    replace_in_paragraph(para, placeholders)
                 for para in cell.paragraphs:
-                    if not para.text:
-                        continue
-                    for ph, value in placeholders.items():
-                        replace_placeholder(para, ph, value)
-                # Maintain cell alignment
+                    replace_in_paragraph(para, placeholders)
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
     return doc
 
 def get_hvt_ai_team_details():
-    """Collect team composition details with improved layout"""
+    """Collect team composition details"""
     st.subheader("Team Composition")
     team_roles = {
         "Project Manager": "P1",
@@ -148,41 +130,37 @@ def get_hvt_ai_team_details():
         "Backend Developers": "BD1",
         "System Architect": "S1"
     }
-    
     team_details = {}
     cols = st.columns(2)
-    
+
     for idx, (role, placeholder) in enumerate(team_roles.items()):
         with cols[idx % 2]:
-            team_details[f"<<{placeholder}>>"] = st.number_input(
+            count = st.number_input(
                 f"{role} Count:",
                 min_value=0,
                 step=1,
                 key=f"hvt_team_{placeholder}"
             )
+            team_details[f"<<{placeholder}>>"] = str(count)
     return team_details
 
-def validate_phone_number(country, number):
-    """Enhanced phone number validation"""
-    if not number:
-        return True
+def validate_phone_number(country, phone_number):
+    """Validate phone number format"""
     if country.lower() == "india":
-        return number.startswith("+91")
-    return number.startswith("+1")
+        return phone_number.startswith("+91")
+    return phone_number.startswith("+1")
 
 def generate_document():
     st.title("Document Generator Pro")
     base_dir = os.path.join(os.getcwd(), "templates")
 
-    selected_proposal = st.selectbox("Select Document Type", list(PROPOSAL_CONFIG.keys()))
+    selected_proposal = st.selectbox("Select Document", list(PROPOSAL_CONFIG.keys()))
     config = PROPOSAL_CONFIG[selected_proposal]
     template_path = os.path.join(base_dir, config["template"])
 
-    # Initialize session state for downloads
     if 'generated_files' not in st.session_state:
         st.session_state.generated_files = {}
 
-    # Collect common fields
     placeholders = {}
     if selected_proposal == "Internship Offer Letter":
         st.subheader("Candidate Information")
@@ -203,8 +181,7 @@ def generate_document():
         with col2:
             country = st.text_input("Country:")
             client_number = st.text_input("Phone Number:")
-        
-        # Add separate date fields
+
         st.subheader("Date Information")
         date_col1, date_col2 = st.columns(2)
         with date_col1:
@@ -218,15 +195,13 @@ def generate_document():
             "<<Client Number>>": client_number,
             "<<Country>>": country,
             "<<Date>>": date_field.strftime("%d %B, %Y"),
-            "<<D-Date>>": date_field.strftime("%d %B, %Y"),  # Same as Date
-            "<<VDate>>": validation_date.strftime("%d-%m-%Y")  # New validation date
+            "<<D-Date>>": date_field.strftime("%d %B, %Y"),
+            "<<VDate>>": validation_date.strftime("%d-%m-%Y")
         })
 
-        # Add team composition
         if "hvt_ai" in config["team_type"]:
             placeholders.update(get_hvt_ai_team_details())
 
-        # Add pricing section
         if "custom_price" in config["team_type"]:
             st.subheader("Pricing Details")
             pricing = {
@@ -238,13 +213,11 @@ def generate_document():
             placeholders["<<T-Price>>"] = f"{sum(pricing.values()):,}"
 
     if st.button("Generate Documents"):
-        # Validate inputs
         if selected_proposal != "Internship Offer Letter":
             if not validate_phone_number(placeholders["<<Country>>"], placeholders["<<Client Number>>"]):
                 st.error("Invalid phone number format for selected country")
                 return
 
-        # Generate unique filenames
         unique_id = uuid.uuid4().hex[:8]
         base_name = f"{selected_proposal.replace(' ', '_')}_{unique_id}"
         doc_filename = f"{base_name}.docx"
@@ -252,19 +225,23 @@ def generate_document():
 
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
-                # Process Word document
                 doc = Document(template_path)
-                doc = process_document(doc, placeholders)
+                doc = replace_and_format(doc, placeholders)
                 doc_path = os.path.join(temp_dir, doc_filename)
                 doc.save(doc_path)
 
-                # Convert to PDF
                 pdf_path = os.path.join(temp_dir, pdf_filename)
-                if platform.system() == "Windows":
-                    pythoncom.CoInitialize()
-                convert(doc_path, pdf_path)
-                if platform.system() == "Windows":
-                    pythoncom.CoUninitialize()
+                
+                # Start unoserver process
+                uno_process = subprocess.Popen(["unoserver", "--port", "2002"])
+                
+                try:
+                    if not convert_docx_to_pdf(doc_path, pdf_path):
+                        st.error("PDF conversion failed")
+                        st.stop()
+                finally:
+                    uno_process.terminate()
+                    uno_process.wait()
 
                 # Store files in session state
                 with open(doc_path, "rb") as f:
@@ -281,11 +258,9 @@ def generate_document():
             if platform.system() == "Windows":
                 pythoncom.CoUninitialize()
 
-    # Display download buttons
     if 'doc' in st.session_state.generated_files:
         st.markdown("---")
-        st.subheader("Download Generated Files")
-        
+        st.subheader("Download Documents")
         col1, col2 = st.columns(2)
         with col1:
             st.download_button(
