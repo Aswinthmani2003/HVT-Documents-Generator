@@ -37,33 +37,40 @@ PROPOSAL_CONFIG = {
 }
 
 def convert_docx_to_pdf(docx_path, pdf_path):
-    """Convert DOCX to PDF using platform-appropriate method"""
-    if platform.system() == "Windows":
-        try:
+    """Platform-agnostic DOCX to PDF conversion"""
+    try:
+        if platform.system() == "Windows":
+            from docx2pdf import convert
             convert(docx_path, pdf_path)
             return True
-        except Exception as e:
-            st.error(f"Conversion failed: {str(e)}")
-            return False
-    else:
-        try:
-            # Start unoserver before conversion
-            uno_process = subprocess.Popen(["unoserver", "--port", "2002"])
+        else:
+            # Start unoserver with explicit path
+            uno_process = subprocess.Popen([
+                "unoserver", 
+                "--interface", "0.0.0.0",
+                "--port", "2002"
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+            # Add conversion timeout
             result = subprocess.run(
                 ['unoconv', '-f', 'pdf', '-o', str(pdf_path.parent), str(docx_path)],
                 check=True,
+                timeout=30,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
+            
+            # Cleanup process
             uno_process.terminate()
-            uno_process.wait()
+            uno_process.wait(timeout=10)
             return True
-        except subprocess.CalledProcessError as e:
-            st.error(f"Conversion failed: {e.stderr.decode()}")
-            return False
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
-            return False
+            
+    except subprocess.CalledProcessError as e:
+        st.error(f"Conversion error: {e.stderr.decode()}")
+        return False
+    except Exception as e:
+        st.error(f"Conversion failed: {str(e)}")
+        return False
 
 def apply_formatting(new_run, original_run):
     """Copy formatting from original run to new run"""
@@ -315,12 +322,9 @@ def generate_document():
 
             with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
                 temp_dir = Path(temp_dir)
-                doc = Document(template_path)
-                doc = replace_and_format(doc, placeholders)
-
+                os.chmod(temp_dir, 0o777)
                 doc_path = temp_dir / doc_filename
                 pdf_path = temp_dir / pdf_filename
-                doc.save(doc_path)
 
                 if not convert_docx_to_pdf(doc_path, pdf_path):
                     st.error("PDF conversion failed")
