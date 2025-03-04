@@ -40,52 +40,32 @@ PROPOSAL_CONFIG = {
 }
 
 def convert_docx_to_pdf(docx_path, pdf_path):
-    """Robust DOCX to PDF conversion with cross-platform support"""
+    """Platform-specific DOCX to PDF conversion"""
     try:
         if platform.system() == "Windows":
             # Windows conversion using docx2pdf
-            from docx2pdf import convert
+            from docx2pdf import convert  # Moved inside platform check
             convert(str(docx_path), str(pdf_path))
             return True
         else:
             # Linux conversion using unoconv
-            # Start unoserver with verbose logging
             uno_process = subprocess.Popen(
                 ["unoserver", "--port", "2002", "--interface", "0.0.0.0"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                stderr=subprocess.PIPE
             )
-            
-            # Wait for server initialization
             time.sleep(15)
             
-            # Perform conversion with extended timeout
             result = subprocess.run(
-                ['unoconv', '-v', '-f', 'pdf', '-o', str(pdf_path.parent), str(docx_path)],
+                ['unoconv', '-f', 'pdf', '-o', str(pdf_path.parent), str(docx_path)],
                 check=True,
-                timeout=120,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                timeout=120
             )
-            
-            # Log conversion details
-            print("Conversion Output:")
-            print("STDOUT:", result.stdout)
-            print("STDERR:", result.stderr)
-            
-            # Cleanup process
             uno_process.terminate()
-            uno_process.wait(timeout=30)
-            
             return True
             
-    except subprocess.CalledProcessError as e:
-        print(f"Conversion Error: {e.stderr}")
-        return False
     except Exception as e:
-        print(f"Critical Failure: {str(e)}")
+        st.error(f"Conversion failed: {str(e)}")
         return False
 
 def apply_formatting(new_run, original_run):
