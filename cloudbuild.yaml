@@ -1,0 +1,16 @@
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/hv-technologies/hvt-docs-generator:latest', '.']
+
+  # Push the Docker image to GCR
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/hv-technologies/hvt-docs-generator:latest']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args: ['run', 'deploy', 'hvt-docs-app',
+           '--image', 'gcr.io/hv-technologies/hvt-docs-generator:latest',
+           '--platform', 'managed',
+           '--region', 'us-central1',
+           '--allow-unauthenticated']
