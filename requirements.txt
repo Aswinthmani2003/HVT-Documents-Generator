@@ -1,6 +1,5 @@
 streamlit==1.26.0
 python-docx==0.8.11
-docx2pdf==0.1.8
+unoserver==1.4
 uuid==1.30
 python-dotenv==1.0.0
-pywin32==306; platform_system == "Windows"
