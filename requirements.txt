@@ -1,8 +1,6 @@
 streamlit
 python-docx
-datetime
 pandas
-pathlib
 uuid
 tempfile
 subprocess
