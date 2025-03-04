@@ -37,21 +37,17 @@ PROPOSAL_CONFIG = {
 def convert_docx_to_pdf(docx_path, pdf_path):
     """Convert DOCX to PDF using LibreOffice"""
     try:
-        # Start unoserver in the background
-        uno_process = subprocess.Popen(["unoserver", "--port", "2002"])
-        
-        # Convert using unoconv
+        # Start unoserver before conversion
+        subprocess.Popen(["unoserver", "--port", "2002"])
+
+        # Convert DOCX to PDF
         result = subprocess.run(
             ['unoconv', '-f', 'pdf', '-o', str(pdf_path.parent), str(docx_path)],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
-        
-        # Stop unoserver
-        uno_process.terminate()
-        uno_process.wait()
-        
+
         return True
     except subprocess.CalledProcessError as e:
         st.error(f"Conversion failed: {e.stderr.decode()}")
@@ -126,39 +122,6 @@ def replace_and_format(doc, placeholders):
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
     return doc
 
-def get_hvt_ai_team_details():
-    """Collect team composition details"""
-    st.subheader("Team Composition")
-    team_roles = {
-        "Project Manager": "P1",
-        "Frontend Developers": "F1",
-        "UI/UX Members": "U1",
-        "AI/ML Developers": "A1",
-        "Business Analyst": "B1",
-        "AWS Developer": "AD1",
-        "Backend Developers": "BD1",
-        "System Architect": "S1"
-    }
-    team_details = {}
-    cols = st.columns(2)
-
-    for idx, (role, placeholder) in enumerate(team_roles.items()):
-        with cols[idx % 2]:
-            count = st.number_input(
-                f"{role} Count:",
-                min_value=0,
-                step=1,
-                key=f"hvt_team_{placeholder}"
-            )
-            team_details[f"<<{placeholder}>>"] = str(count)
-    return team_details
-
-def validate_phone_number(country, phone_number):
-    """Validate phone number format"""
-    if country.lower() == "india":
-        return phone_number.startswith("+91")
-    return phone_number.startswith("+1")
-
 def generate_document():
     st.title("Document Generator Pro")
     base_dir = os.path.join(os.getcwd(), "templates")
@@ -171,76 +134,48 @@ def generate_document():
         st.session_state.generated_files = {}
 
     placeholders = {}
-    if selected_proposal == "Internship Offer Letter":
-        st.subheader("Candidate Information")
-        placeholders.update({
-            "<<E-Name>>": st.text_input("Candidate Name:"),
-            "<<Job>>": st.selectbox("Job Role", ["UI UX", "AI Automations", "Software Developer", "Sales"]),
-            "<<S-Date>>": st.date_input("Start Date").strftime("%d %B, %Y"),
-            "<<Stipend>>": f"{st.number_input('Stipend (₹)', min_value=0):,}",
-            "<<Months>>": st.number_input("Duration (Months)", min_value=1),
-            "<<Date>>": datetime.today().strftime("%d %B, %Y")
-        })
-    else:
-        st.subheader("Client Details")
-        col1, col2 = st.columns(2)
-        with col1:
-            client_name = st.text_input("Client Name:")
-            client_email = st.text_input("Email:")
-        with col2:
-            country = st.text_input("Country:")
-            client_number = st.text_input("Phone Number:")
 
-        st.subheader("Date Information")
-        date_col1, date_col2 = st.columns(2)
-        with date_col1:
-            date_field = st.date_input("Proposal Date", datetime.today())
-        with date_col2:
-            validation_date = st.date_input("Validation Date", datetime.today())
+    st.subheader("Client Details")
+    col1, col2 = st.columns(2)
+    with col1:
+        client_name = st.text_input("Client Name:")
+        client_email = st.text_input("Email:")
+    with col2:
+        country = st.text_input("Country:")
+        client_number = st.text_input("Phone Number:")
 
-        placeholders.update({
-            "<<Client Name>>": client_name,
-            "<<Client Email>>": client_email,
-            "<<Client Number>>": client_number,
-            "<<Country>>": country,
-            "<<Date>>": date_field.strftime("%d %B, %Y"),
-            "<<D-Date>>": date_field.strftime("%d %B, %Y"),
-            "<<VDate>>": validation_date.strftime("%d-%m-%Y")
-        })
+    st.subheader("Date Information")
+    date_col1, date_col2 = st.columns(2)
+    with date_col1:
+        date_field = st.date_input("Proposal Date", datetime.today())
+    with date_col2:
+        validation_date = st.date_input("Validation Date", datetime.today())
 
-        if "hvt_ai" in config["team_type"]:
-            placeholders.update(get_hvt_ai_team_details())
-
-        if "custom_price" in config["team_type"]:
-            st.subheader("Pricing Details")
-            pricing = {
-                "<<P01>>": st.number_input("Manychats Setup (USD)", min_value=0),
-                "<<P02>>": st.number_input("Make Automations (USD)", min_value=0),
-                "<<A-Price>>": st.number_input("Annual Maintenance (USD)", min_value=0)
-            }
-            placeholders.update(pricing)
-            placeholders["<<T-Price>>"] = f"{sum(pricing.values()):,}"
+    placeholders.update({
+        "<<Client Name>>": client_name,
+        "<<Client Email>>": client_email,
+        "<<Client Number>>": client_number,
+        "<<Country>>": country,
+        "<<Date>>": date_field.strftime("%d %B, %Y"),
+        "<<D-Date>>": date_field.strftime("%d %B, %Y"),
+        "<<VDate>>": validation_date.strftime("%d-%m-%Y")
+    })
 
     if st.button("Generate Documents"):
-        if selected_proposal != "Internship Offer Letter":
-            if not validate_phone_number(placeholders["<<Country>>"], placeholders["<<Client Number>>"]):
-                st.error("Invalid phone number format for selected country")
-                return
-
         unique_id = uuid.uuid4().hex[:8]
         base_name = f"{selected_proposal.replace(' ', '_')}_{unique_id}"
         doc_filename = f"{base_name}.docx"
         pdf_filename = f"{base_name}.pdf"
 
         try:
-            with tempfile.TemporaryDirectory() as temp_dir:
+            with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:  # Updated temp directory
+                doc_path = os.path.join(temp_dir, doc_filename)
+                pdf_path = os.path.join(temp_dir, pdf_filename)
+
                 doc = Document(template_path)
                 doc = replace_and_format(doc, placeholders)
-                doc_path = os.path.join(temp_dir, doc_filename)
                 doc.save(doc_path)
 
-                pdf_path = os.path.join(temp_dir, pdf_filename)
-                
                 # Convert to PDF using LibreOffice
                 if not convert_docx_to_pdf(doc_path, pdf_path):
                     st.error("Failed to convert DOCX to PDF")
@@ -258,8 +193,6 @@ def generate_document():
 
         except Exception as e:
             st.error(f"Generation failed: {str(e)}")
-            if platform.system() == "Windows":
-                pythoncom.CoUninitialize()
 
     if 'doc' in st.session_state.generated_files:
         st.markdown("---")
