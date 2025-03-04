@@ -1,15 +1,15 @@
 steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/hv-technologies/hvt-docs-generator:latest', '.']
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/hv-technologies/hvt-docs-generator:latest']
-  - name: 'gcr.io/cloud-builders/gcloud'
-    args: ['run', 'deploy', 'hvt-docs-app',
-           '--image', 'gcr.io/hv-technologies/hvt-docs-generator:latest',
-           '--platform', 'managed',
-           '--region', 'us-central1',
-           '--memory', '4Gi',
-           '--cpu', '2',
-           '--timeout', '900',
-           '--port', '8080',
-           '--allow-unauthenticated']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/hv-technologies/hvt-docs-generator:latest', '.']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/hv-technologies/hvt-docs-generator:latest']
+- name: 'gcr.io/cloud-builders/gcloud'
+  args: ['run', 'deploy', 'hvt-docs-app',
+         '--image', 'gcr.io/hv-technologies/hvt-docs-generator:latest',
+         '--platform', 'managed',
+         '--region', 'us-central1',
+         '--memory', '4Gi',
+         '--cpu', '2',
+         '--timeout', '900',
+         '--port', '8080',
+         '--allow-unauthenticated']
