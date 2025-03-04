@@ -1,24 +1,23 @@
+import os
+import platform
+import subprocess
+import tempfile
+import time
+import uuid
+from datetime import datetime
+from pathlib import Path
+
 import streamlit as st
 from docx import Document
-from datetime import datetime
-import os
-from docx2pdf import convert
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt, RGBColor
-import platform
-import time
-from docx.oxml.ns import qn
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
-import uuid
-import tempfile
-import subprocess
-from pathlib import Path
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.shared import Pt, RGBColor
 
 # Conditional import and initialization for Windows
 import platform
 if platform.system() == "Windows":
-    import pythoncom
-    pythoncom.CoInitialize()
+    from docx2pdf import convert
     
 
 PROPOSAL_CONFIG = {
