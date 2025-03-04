@@ -1,8 +1,5 @@
-streamlit
-python-docx
-pandas
-uuid
-tempfile
-subprocess
-libreoffice
-unoconv
+streamlit==1.26.0
+python-docx==0.8.11
+unoserver==1.4
+uuid==1.30
+python-dotenv==1.0.0
