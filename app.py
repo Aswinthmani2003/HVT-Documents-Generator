@@ -88,7 +88,7 @@ def replace_in_paragraph(para, placeholders):
     text_length = 0
     for run in original_runs:
         run_text = run.text
-        run_map.append((text_length, text_length + len(run_text), run)
+        run_map.append((text_length, text_length + len(run_text), run))
         text_length += len(run_text)
 
     # Build full text and check for replacements
