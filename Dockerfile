@@ -29,7 +29,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expose port for Streamlit
-EXPOSE 8080
+EXPOSE 8501
 
 # Start unoserver and Streamlit
-CMD (unoserver --port 2002 &) && streamlit run app.py --server.port 8080 --server.address 0.0.0.0
+CMD (unoserver --port 2002 &) && streamlit run app.py --server.port 8501 --server.address 0.0.0.0
